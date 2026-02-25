@@ -5,6 +5,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackvidyu/witchhunt/server/internal/config"
+	"github.com/jackvidyu/witchhunt/server/internal/game"
 	"github.com/jackvidyu/witchhunt/server/internal/handler"
 	"github.com/jackvidyu/witchhunt/server/internal/middleware"
 	"github.com/jackvidyu/witchhunt/server/internal/model"
@@ -20,13 +21,12 @@ func main() {
 		log.Fatalf("failed to connect database: %v", err)
 	}
 
-	hub := ws.NewHub()
+	rm := room.NewManager()
+	engine := game.NewEngine()
+	hub := ws.NewHub(engine, rm)
 	go hub.Run()
 
-	rm := room.NewManager()
-
 	r := gin.Default()
-
 	r.Use(middleware.CORS())
 
 	api := r.Group("/api")
