@@ -193,19 +193,18 @@ func (g *Game) processContagion() []Event {
 func (g *Game) processGreenCard(player, target *Player, card *Card, action Action) []Event {
 	switch card.Type {
 	case CTDefense:
-		for target.AccuseTotal > 0 && len(target.Accusations) > 0 {
+		removed := 0
+		for removed < 3 && target.AccuseTotal > 0 && len(target.Accusations) > 0 {
 			last := target.Accusations[len(target.Accusations)-1]
 			target.AccuseTotal -= last.Value
 			target.Accusations = target.Accusations[:len(target.Accusations)-1]
 			g.DiscardPile = append(g.DiscardPile, last)
-			if target.AccuseTotal <= target.AccuseTotal-3 {
-				break
-			}
+			removed += last.Value
 		}
 		if target.AccuseTotal < 0 {
 			target.AccuseTotal = 0
 		}
-		return []Event{{Message: fmt.Sprintf("%s 为 %s 辩护（剩余 %d/7）", player.Username, target.Username, target.AccuseTotal)}}
+		return []Event{{Message: fmt.Sprintf("%s 为 %s 辩护，移除 %d 点指控（剩余 %d/7）", player.Username, target.Username, removed, target.AccuseTotal)}}
 
 	case CTArson:
 		cnt := len(target.Hand)

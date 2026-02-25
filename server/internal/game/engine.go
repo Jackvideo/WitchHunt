@@ -148,7 +148,8 @@ func newGame(players []PlayerInfo) (*Game, error) {
 		deck = append(deck, nightCard)
 	}
 	if blackCatCard != nil {
-		gp[rand.Intn(n)].Equipment = append(gp[rand.Intn(n)].Equipment, blackCatCard)
+		holder := gp[rand.Intn(n)]
+		holder.Equipment = append(holder.Equipment, blackCatCard)
 	}
 
 	_, wc, _ := identityCounts(n)
