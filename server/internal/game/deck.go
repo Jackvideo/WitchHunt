@@ -41,6 +41,7 @@ func shuffleCards(cards []*Card) {
 
 func identityCounts(n int) (villager, witch, sheriff int) {
 	sheriff = 1
+	var total int
 	if n <= 5 {
 		witch = 1
 	} else {
@@ -50,20 +51,21 @@ func identityCounts(n int) (villager, witch, sheriff int) {
 	if n >= 10 {
 		perPlayer = 3
 	}
-	villager = n*perPlayer - witch - sheriff
+	total = n * perPlayer
+	villager = total - witch - sheriff
 	return
 }
 
 func newIdentityCards(numPlayers int) []*IdentityCard {
-	v, w, s := identityCounts(numPlayers)
-	cards := make([]*IdentityCard, 0, v+w+s)
-	for range v {
+	villager, witch, sheriff := identityCounts(numPlayers)
+	cards := make([]*IdentityCard, 0, villager+witch+sheriff)
+	for i := 0; i < villager; i++ {
 		cards = append(cards, &IdentityCard{Type: IDVillager})
 	}
-	for range w {
+	for i := 0; i < witch; i++ {
 		cards = append(cards, &IdentityCard{Type: IDWitch})
 	}
-	for range s {
+	for i := 0; i < sheriff; i++ {
 		cards = append(cards, &IdentityCard{Type: IDSheriff})
 	}
 	rand.Shuffle(len(cards), func(i, j int) { cards[i], cards[j] = cards[j], cards[i] })

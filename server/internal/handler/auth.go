@@ -78,3 +78,14 @@ func Login(db *gorm.DB, secret string) gin.HandlerFunc {
 		})
 	}
 }
+
+func GetCardDescriptions(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var descs []model.CardDescription
+		if err := db.Find(&descs).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch card descriptions"})
+			return
+		}
+		c.JSON(http.StatusOK, descs)
+	}
+}

@@ -56,6 +56,12 @@ export interface TrialInfo {
   flipper_id: number
 }
 
+export interface GameEvent {
+  message: string
+  type?: string
+  data?: Record<string, unknown>
+}
+
 export interface GameState {
   phase: string
   your_id: number
@@ -65,7 +71,7 @@ export interface GameState {
   is_witch: boolean
   players: PublicPlayer[]
   actions: string[] | null
-  events: { message: string }[]
+  events: GameEvent[]
   draw_pile_count: number
   winner?: string
   fellow_witches?: number[]

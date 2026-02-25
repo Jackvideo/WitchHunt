@@ -5,7 +5,26 @@ import { useAuthStore } from './auth'
 
 export const useRoomStore = defineStore('room', () => {
   const currentRoom = ref<Room | null>(null)
+  const cardDescriptions = ref<Record<string, string>>({})
   const error = ref('')
+
+  async function fetchCardDescriptions() {
+    // If already fetched, don't fetch again
+    if (Object.keys(cardDescriptions.value).length > 0) return
+
+    const auth = useAuthStore()
+    try {
+      const res = await auth.apiFetch('/api/cards')
+      if (res.ok) {
+        const data = await res.json()
+        data.forEach((d: any) => {
+          cardDescriptions.value[d.type] = d.description
+        })
+      }
+    } catch {
+      // ignore
+    }
+  }
 
   async function createRoom(maxPlayers: number) {
     error.value = ''
@@ -54,5 +73,5 @@ export const useRoomStore = defineStore('room', () => {
     error.value = ''
   }
 
-  return { currentRoom, error, createRoom, joinRoom, clear }
+  return { currentRoom, cardDescriptions, error, createRoom, joinRoom, fetchCardDescriptions, clear }
 })

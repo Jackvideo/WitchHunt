@@ -81,6 +81,7 @@ type Player struct {
 	AccuseTotal int             `json:"accuse_total"`
 	Alive       bool            `json:"alive"`
 	IsWitch     bool            `json:"-"`
+	IsBot       bool            `json:"is_bot"`
 	Detained    int             `json:"detained"`
 	HasHammer   bool            `json:"has_hammer"`
 }
@@ -117,6 +118,7 @@ func (p *Player) Unrevealed() []*IdentityCard {
 type PlayerInfo struct {
 	UserID   uint
 	Username string
+	IsBot    bool
 }
 
 type Action struct {
@@ -128,7 +130,9 @@ type Action struct {
 }
 
 type Event struct {
-	Message string `json:"message"`
+	Message string                 `json:"message"`
+	Type    string                 `json:"type,omitempty"`
+	Data    map[string]interface{} `json:"data,omitempty"`
 }
 
 type ActionResult struct {

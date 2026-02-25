@@ -102,6 +102,7 @@ func newGame(players []PlayerInfo) (*Game, error) {
 			Username:   pi.Username,
 			Identities: ids[idx : idx+perPlayer],
 			Alive:      true,
+			IsBot:      pi.IsBot,
 		}
 		idx += perPlayer
 	}
@@ -260,7 +261,8 @@ func (g *Game) killPlayer(p *Player) {
 	if p.IsWitch {
 		faction = "女巫阵营"
 	}
-	g.evt("%s 死亡，属于%s", p.Username, faction)
+	g.evtTyped("kill", map[string]interface{}{"player_id": p.UserID},
+		"%s 死亡，属于%s", p.Username, faction)
 }
 
 func (g *Game) checkPlayerDeath(p *Player) bool {
@@ -357,4 +359,12 @@ func (g *Game) endWithWinner(winner string) {
 
 func (g *Game) evt(format string, args ...any) {
 	g.Events = append(g.Events, Event{Message: fmt.Sprintf(format, args...)})
+}
+
+func (g *Game) evtTyped(typ string, data map[string]interface{}, format string, args ...any) {
+	g.Events = append(g.Events, Event{
+		Message: fmt.Sprintf(format, args...),
+		Type:    typ,
+		Data:    data,
+	})
 }

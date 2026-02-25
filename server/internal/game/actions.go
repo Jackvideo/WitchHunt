@@ -21,6 +21,7 @@ func (g *Game) handleDayAction(userID uint, action Action) (*ActionResult, error
 	case "play_card":
 		return g.handlePlayCard(action)
 	case "end_turn":
+		g.evt("%s 结束了回合", g.currentPlayer().Username)
 		g.nextTurn()
 		return &ActionResult{}, nil
 	default:
@@ -49,6 +50,7 @@ func (g *Game) handleDraw() (*ActionResult, error) {
 	}
 
 	if g.Phase == PhaseDay {
+		g.evt("%s 结束了回合，进行抽牌", p.Username)
 		g.nextTurn()
 	}
 	return result, nil
@@ -106,10 +108,12 @@ func (g *Game) processBlackCard(card *Card) []Event {
 	g.DiscardPile = append(g.DiscardPile, card)
 	switch card.Type {
 	case CTNight:
+		g.evt("夜幕降临...")
 		g.enterNight()
-		return []Event{{Message: "夜幕降临..."}}
+		return nil
 	case CTContagion:
-		return g.processContagion()
+		g.processContagion()
+		return nil
 	}
 	return nil
 }
@@ -127,16 +131,15 @@ func (g *Game) enterNight() {
 	g.evt("女巫请睁眼，选择要杀害的目标")
 }
 
-func (g *Game) processContagion() []Event {
-	events := []Event{{Message: "传染！所有玩家从左边玩家获取一张身份牌"}}
+func (g *Game) processContagion() {
+	g.evtTyped("contagion", nil, "传染！所有玩家从左边玩家获取一张身份牌")
 
 	for _, p := range g.Players {
 		if p.Alive && p.HasEquipment(CTBlackCat) {
 			if ur := p.Unrevealed(); len(ur) > 0 {
 				ur[0].Revealed = true
-				events = append(events, Event{
-					Message: fmt.Sprintf("%s 持有黑猫，被迫翻开一张[%s]身份牌", p.Username, IdentityNames[ur[0].Type]),
-				})
+				g.evtTyped("contagion", map[string]interface{}{"player_id": p.UserID},
+					"%s 持有黑猫，被迫翻开一张[%s]身份牌", p.Username, IdentityNames[ur[0].Type])
 				g.checkPlayerDeath(p)
 			}
 			break
@@ -151,7 +154,7 @@ func (g *Game) processContagion() []Event {
 	}
 	n := len(alive)
 	if n < 2 {
-		return events
+		return
 	}
 
 	type xfer struct {
@@ -178,14 +181,21 @@ func (g *Game) processContagion() []Event {
 			}
 		}
 	}
+
+	var receivedIDs []interface{}
 	for i, t := range takes {
 		if t.card != nil {
 			alive[i].Identities = append(alive[i].Identities, t.card)
+			receivedIDs = append(receivedIDs, alive[i].UserID)
 		}
 	}
 
+	if len(receivedIDs) > 0 {
+		g.evtTyped("contagion_receive", map[string]interface{}{"player_ids": receivedIDs},
+			"传染完成，%d名玩家交换了身份牌", len(receivedIDs))
+	}
+
 	g.updateWitchStatus()
-	return events
 }
 
 // ===================== Green cards =====================
@@ -376,7 +386,14 @@ func (g *Game) resolveNight() (*ActionResult, error) {
 		case target.HasEquipment(CTSanctuary):
 			g.evt("%s 受到避难所保护", target.Username)
 		case target.HasHammer:
-			g.evt("%s 受到警长保护", target.Username)
+			sheriffID := uint(0)
+			if sh := g.findSheriff(); sh != nil {
+				sheriffID = sh.UserID
+			}
+			g.evtTyped("sheriff_protect", map[string]interface{}{
+				"sheriff_id": sheriffID,
+				"target_id":  target.UserID,
+			}, "%s 受到警长保护", target.Username)
 		default:
 			g.killPlayer(target)
 		}

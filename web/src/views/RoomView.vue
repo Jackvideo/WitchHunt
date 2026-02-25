@@ -1,19 +1,24 @@
 <script setup lang="ts">
-import { ref, computed, watch, nextTick } from 'vue'
+import { ref, reactive, computed, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { useRoomStore } from '../stores/room'
 import { useWebSocket } from '../composables/useWebSocket'
-import type { Card, GameState, PublicPlayer } from '../types'
+import type { Card, GameState, GameEvent, PublicPlayer } from '../types'
 import { cardNames, identityNames, phaseNames, cardColorClass, identityColorClass, needsTwoTargets } from '../types'
 
 const route = useRoute()
 const router = useRouter()
-const auth = useAuthStore()
-const roomStore = useRoomStore()
+  const auth = useAuthStore()
+  const roomStore = useRoomStore()
 
-const roomCode = route.params.code as string
-const token = auth.user?.token ?? ''
+  const roomCode = route.params.code as string
+
+  if (roomCode) {
+    roomStore.fetchCardDescriptions()
+  }
+
+  const token = auth.user?.token ?? ''
 if (!token) router.push('/login')
 
 const { connected, messages, send } = useWebSocket(roomCode, token)
@@ -27,16 +32,73 @@ const firstTargetId = ref<number | null>(null)
 
 const logEl = ref<HTMLElement | null>(null)
 
+const playerEffects = reactive<Record<number, string>>({})
+const effectTimeouts = new Map<number, ReturnType<typeof setTimeout>>()
+const prevEventCount = ref(0)
+
+function setPlayerEffect(playerId: number, type: string, durationMs: number) {
+  const existing = effectTimeouts.get(playerId)
+  if (existing) clearTimeout(existing)
+  playerEffects[playerId] = type
+  const timeout = setTimeout(() => {
+    delete playerEffects[playerId]
+    effectTimeouts.delete(playerId)
+  }, durationMs)
+  effectTimeouts.set(playerId, timeout)
+}
+
+function processEventEffect(evt: GameEvent) {
+  if (evt.type === 'kill' && evt.data?.player_id) {
+    setPlayerEffect(Number(evt.data.player_id), 'kill', 3000)
+  }
+  if (evt.type === 'sheriff_protect' && evt.data?.sheriff_id) {
+    setPlayerEffect(Number(evt.data.sheriff_id), 'sheriff', 3000)
+  }
+  if (evt.type === 'contagion_receive' && evt.data?.player_ids) {
+    const ids = evt.data.player_ids as number[]
+    for (const id of ids) {
+      setPlayerEffect(id, 'contagion', 12000)
+    }
+  }
+}
+
 watch(messages, (msgs) => {
   const last = msgs[msgs.length - 1]
   if (!last) return
   if (last.type === 'state_update' && last.payload) {
-    gameState.value = last.payload as unknown as GameState
+    const newState = last.payload as unknown as GameState
+    const events = newState.events || []
+    if (events.length > prevEventCount.value) {
+      const newEvents = events.slice(prevEventCount.value)
+      for (const evt of newEvents) {
+        processEventEffect(evt)
+      }
+    }
+    prevEventCount.value = events.length
+    gameState.value = newState
     nextTick(() => logEl.value?.scrollTo(0, logEl.value.scrollHeight))
   }
   if (last.type === 'error' && last.payload) {
     errorMsg.value = (last.payload as { message: string }).message
     setTimeout(() => (errorMsg.value = ''), 3000)
+  }
+  if (last.type === 'player_join' && last.payload) {
+    if (roomStore.currentRoom) {
+      const pid = Number(last.payload.user_id || last.payload.id)
+      if (!roomStore.currentRoom.players.find(p => p.id === pid)) {
+        roomStore.currentRoom.players.push({
+          id: pid,
+          username: String(last.payload.username),
+          ready: true
+        })
+      }
+    }
+  }
+  if (last.type === 'player_leave' && last.payload) {
+    if (roomStore.currentRoom) {
+      const pid = Number(last.payload.user_id || last.payload.id)
+      roomStore.currentRoom.players = roomStore.currentRoom.players.filter(p => p.id !== pid)
+    }
   }
 }, { deep: true })
 
@@ -60,6 +122,10 @@ function sendAction(type_: string, data: Record<string, unknown> = {}) {
 
 function startGame() {
   send({ type: 'start_game' })
+}
+
+function addBot() {
+  send({ type: 'add_bot' })
 }
 
 function leaveRoom() {
@@ -165,11 +231,13 @@ function flipIdentity(index: number) {
         v-for="p in players" :key="p.user_id"
         class="relative px-3 py-2.5 rounded-xl border transition cursor-pointer"
         :class="[
-          !p.alive ? 'opacity-40 border-gray-700 bg-surface-light/50' :
+          !p.alive && playerEffects[p.user_id] !== 'kill' ? 'opacity-40 border-gray-700 bg-surface-light/50' :
+          playerEffects[p.user_id] === 'kill' ? 'border-red-500 bg-red-500/15 shadow-[0_0_12px_rgba(239,68,68,0.4)] animate-shake' :
+          playerEffects[p.user_id] === 'sheriff' ? 'border-yellow-400 bg-yellow-400/10 shadow-[0_0_12px_rgba(250,204,21,0.3)]' :
+          playerEffects[p.user_id] === 'contagion' ? 'border-red-400 bg-red-500/10 ring-1 ring-red-400/40' :
           selectedCard && targetStep !== 'none' && isTarget(p.user_id) ? 'border-accent bg-amber-500/10 hover:bg-amber-500/20' :
           (gs?.phase === 'night_witch' || gs?.phase === 'night_sheriff') && isTarget(p.user_id) ? 'border-accent bg-amber-500/10 hover:bg-amber-500/20' :
           'border-gray-700 bg-surface-light hover:border-gray-500',
-          gs?.phase === 'day' && gs.players[gs.players.findIndex(x => x.user_id === gs!.players[0]?.user_id)]?.user_id === p.user_id ? '' : '',
         ]"
         @click="clickPlayer(p)"
       >
@@ -195,13 +263,20 @@ function flipIdentity(index: number) {
           <span v-for="eq in (p.equipment || [])" :key="eq.id" class="text-[10px] px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-300">
             {{ cardNames[eq.type] || eq.type }}
           </span>
-          <span v-if="p.unrevealed_count > 0" class="text-[10px] px-1.5 py-0.5 rounded bg-gray-600/30 text-gray-400">
+          <span v-if="playerEffects[p.user_id] === 'contagion'" class="text-[10px] px-1.5 py-0.5 rounded bg-red-500/30 text-red-300 animate-pulse">
+            传染
+          </span>
+          <span v-if="p.unrevealed_count > 0 && p.user_id !== gs?.your_id" class="text-[10px] px-1.5 py-0.5 rounded bg-gray-600/30 text-gray-400">
             身份 {{ p.unrevealed_count }}张
           </span>
-          <span v-for="ri in (p.revealed_identities || [])" :key="ri"
+          <span v-for="(ri, idx) in (p.revealed_identities || [])" :key="'rev-'+idx"
             class="text-[10px] px-1.5 py-0.5 rounded border"
             :class="identityColorClass[ri] || 'bg-gray-600/30 text-gray-400'">
             {{ identityNames[ri] || ri }}
+          </span>
+          <span v-for="(ui, idx) in (p.user_id === gs?.your_id ? gs?.identities?.filter(i => !i.revealed) : [])" :key="'unrev-'+idx"
+            class="text-[10px] px-1.5 py-0.5 rounded border border-gray-600 bg-gray-600/30 text-gray-300">
+            {{ identityNames[ui.type] || ui.type }}
           </span>
         </div>
         <div v-if="!p.alive" class="absolute inset-0 flex items-center justify-center">
@@ -211,17 +286,22 @@ function flipIdentity(index: number) {
     </div>
 
     <!-- Target hint -->
-    <p v-if="selectedCard && targetStep === 'first'" class="text-xs text-accent text-center">
-      选择目标玩家使用 [{{ cardNames[selectedCard.type] || selectedCard.type }}]
-      <button class="ml-2 text-gray-400 hover:text-gray-200" @click="clearSelection">取消</button>
-    </p>
-    <p v-if="selectedCard && targetStep === 'second'" class="text-xs text-accent text-center">
-      选择第二个目标（接收方）
-      <button class="ml-2 text-gray-400 hover:text-gray-200" @click="clearSelection">取消</button>
-    </p>
+    <div v-if="selectedCard" class="text-center space-y-1">
+      <p class="text-xs text-gray-300 font-medium bg-gray-700/50 py-1 px-3 rounded-lg inline-block">
+        {{ roomStore.cardDescriptions[selectedCard.type] || '暂无说明' }}
+      </p>
+      <p v-if="targetStep === 'first'" class="text-xs text-accent">
+        选择目标玩家使用 [{{ cardNames[selectedCard.type] || selectedCard.type }}]
+        <button class="ml-2 text-gray-400 hover:text-gray-200" @click="clearSelection">取消</button>
+      </p>
+      <p v-if="targetStep === 'second'" class="text-xs text-accent">
+        选择第二个目标（接收方）
+        <button class="ml-2 text-gray-400 hover:text-gray-200" @click="clearSelection">取消</button>
+      </p>
+    </div>
 
     <!-- Your identities -->
-    <div v-if="gs && gs.identities" class="bg-surface-light rounded-xl p-3">
+    <div v-if="gs && gs.identities && false" class="bg-surface-light rounded-xl p-3">
       <p class="text-[10px] text-gray-500 mb-1.5">你的身份牌</p>
       <div class="flex gap-1.5 flex-wrap">
         <div v-for="(id, i) in gs.identities" :key="i"
@@ -255,13 +335,22 @@ function flipIdentity(index: number) {
     <!-- Actions -->
     <div class="flex flex-wrap gap-2 justify-center">
       <!-- Lobby: start game -->
-      <button v-if="!gs && isHost && players.length >= 4"
-        class="px-5 py-2.5 bg-primary hover:bg-primary-light rounded-lg font-medium transition"
-        @click="startGame">
-        开始游戏 ({{ players.length }}人)
-      </button>
+      <div v-if="!gs && isHost" class="flex flex-col items-center gap-2">
+        <div class="flex gap-2">
+          <button
+            class="px-5 py-2.5 bg-gray-600 hover:bg-gray-500 rounded-lg font-medium transition"
+            @click="addBot">
+            添加机器人
+          </button>
+          <button v-if="players.length >= 4"
+            class="px-5 py-2.5 bg-primary hover:bg-primary-light rounded-lg font-medium transition"
+            @click="startGame">
+            开始游戏 ({{ players.length }}人)
+          </button>
+        </div>
+        <p v-if="players.length < 4" class="text-xs text-gray-500">至少需要4人才能开始 (当前{{ players.length }}人)</p>
+      </div>
       <p v-if="!gs && !isHost" class="text-xs text-gray-500">等待房主开始游戏...</p>
-      <p v-if="!gs && isHost && players.length < 4" class="text-xs text-gray-500">至少需要4人才能开始 (当前{{ players.length }}人)</p>
 
       <!-- Day actions -->
       <button v-if="actions.includes('draw')"
@@ -311,7 +400,18 @@ function flipIdentity(index: number) {
     <!-- Event log -->
     <div ref="logEl" class="bg-surface-light rounded-xl p-3 max-h-48 overflow-y-auto">
       <p class="text-[10px] text-gray-500 mb-1">事件日志</p>
-      <div v-for="(evt, i) in (gs?.events || [])" :key="i" class="text-xs text-gray-400 py-0.5 border-b border-gray-700/30 last:border-0">
+      <div v-for="(evt, i) in (gs?.events || [])" :key="i"
+        class="text-xs py-0.5 border-b border-gray-700/30 last:border-0 transition-all duration-300"
+        :class="[
+          evt.type === 'contagion' ? 'text-red-400 font-bold text-sm py-1.5 bg-red-500/10 -mx-1 px-1 rounded' :
+          evt.type === 'contagion_receive' ? 'text-red-400 font-semibold' :
+          evt.type === 'kill' ? 'text-red-300 font-semibold' :
+          evt.type === 'sheriff_protect' ? 'text-yellow-300 font-semibold' :
+          'text-gray-400',
+        ]">
+        <span v-if="evt.type === 'contagion'" class="mr-1">⚠</span>
+        <span v-if="evt.type === 'kill'" class="mr-1">💀</span>
+        <span v-if="evt.type === 'sheriff_protect'" class="mr-1">🛡</span>
         {{ evt.message }}
       </div>
       <p v-if="!gs?.events?.length && !gs" class="text-xs text-gray-600">等待游戏开始...</p>
@@ -322,4 +422,13 @@ function flipIdentity(index: number) {
 <style scoped>
 .fade-enter-active, .fade-leave-active { transition: opacity 0.3s; }
 .fade-enter-from, .fade-leave-to { opacity: 0; }
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  10%, 30%, 50%, 70%, 90% { transform: translateX(-3px); }
+  20%, 40%, 60%, 80% { transform: translateX(3px); }
+}
+.animate-shake {
+  animation: shake 0.4s ease-in-out 6;
+}
 </style>

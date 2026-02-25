@@ -17,6 +17,7 @@ type Player struct {
 	ID       uint   `json:"id"`
 	Username string `json:"username"`
 	Ready    bool   `json:"ready"`
+	IsBot    bool   `json:"is_bot"`
 }
 
 type Room struct {
@@ -74,13 +75,41 @@ func (m *Manager) Join(code string, playerID uint, username string) (*Room, erro
 	return r, nil
 }
 
-func (m *Manager) Leave(code string, playerID uint) {
+func (m *Manager) AddBot(code string) (*Room, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	r, ok := m.rooms[code]
 	if !ok {
-		return
+		return nil, ErrRoomNotFound
+	}
+	if len(r.Players) >= r.MaxPlayers {
+		return nil, ErrRoomFull
+	}
+	
+	// Generate unique bot ID (negative or large number to avoid conflict with user IDs)
+	// User IDs are uint, so let's use a large offset + count
+	botID := uint(100000 + len(r.Players))
+	username := "Bot " + string(rune('A'+len(r.Players)))
+	
+	r.Players = append(r.Players, &Player{
+		ID:       botID,
+		Username: username,
+		IsBot:    true,
+		Ready:    true,
+	})
+	return r, nil
+}
+
+// Leave removes a player from the room.
+// Returns true if the room was destroyed (because it became empty or only had bots).
+func (m *Manager) Leave(code string, playerID uint) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	r, ok := m.rooms[code]
+	if !ok {
+		return false
 	}
 	for i, p := range r.Players {
 		if p.ID == playerID {
@@ -88,9 +117,20 @@ func (m *Manager) Leave(code string, playerID uint) {
 			break
 		}
 	}
-	if len(r.Players) == 0 {
-		delete(m.rooms, code)
+
+	hasReal := false
+	for _, p := range r.Players {
+		if !p.IsBot {
+			hasReal = true
+			break
+		}
 	}
+
+	if !hasReal {
+		delete(m.rooms, code)
+		return true
+	}
+	return false
 }
 
 func (m *Manager) Get(code string) (*Room, bool) {

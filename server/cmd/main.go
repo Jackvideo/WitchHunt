@@ -40,6 +40,8 @@ func main() {
 		protected := api.Group("")
 		protected.Use(middleware.JWTAuth(cfg.JWTSecret))
 		{
+			protected.GET("/cards", handler.GetCardDescriptions(db))
+
 			roomGroup := protected.Group("/room")
 			{
 				roomGroup.POST("/create", handler.CreateRoom(rm))
