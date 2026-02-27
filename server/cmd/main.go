@@ -23,7 +23,7 @@ func main() {
 
 	rm := room.NewManager()
 	engine := game.NewEngine()
-	hub := ws.NewHub(engine, rm)
+	hub := ws.NewHub(engine, rm, db)
 	go hub.Run()
 
 	r := gin.Default()
@@ -41,6 +41,8 @@ func main() {
 		protected.Use(middleware.JWTAuth(cfg.JWTSecret))
 		{
 			protected.GET("/cards", handler.GetCardDescriptions(db))
+			protected.GET("/user/stats", handler.GetUserStats(db))
+			protected.GET("/user/history", handler.GetUserHistory(db))
 
 			roomGroup := protected.Group("/room")
 			{

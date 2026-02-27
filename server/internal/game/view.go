@@ -2,6 +2,7 @@ package game
 
 type PlayerView struct {
 	Phase         Phase           `json:"phase"`
+	DayNumber     int             `json:"day_number"`
 	YourID        uint            `json:"your_id"`
 	IsYourTurn    bool            `json:"is_your_turn"`
 	Hand          []*Card         `json:"hand"`
@@ -39,6 +40,7 @@ func (g *Game) viewForPlayer(userID uint) *PlayerView {
 
 	v := &PlayerView{
 		Phase:         g.Phase,
+		DayNumber:     g.DayNumber,
 		YourID:        userID,
 		IsYourTurn:    g.Phase == PhaseDay && g.currentPlayer().UserID == userID,
 		Hand:          me.Hand,

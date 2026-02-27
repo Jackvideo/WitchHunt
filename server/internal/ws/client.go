@@ -27,6 +27,7 @@ type Client struct {
 	UserID   uint
 	Username string
 	RoomCode string
+	LastChat time.Time
 }
 
 func (c *Client) ReadPump() {

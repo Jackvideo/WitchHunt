@@ -20,16 +20,48 @@ type CardDescription struct {
 	Description string `gorm:"size:255;not null" json:"description"`
 }
 
+type GameRecord struct {
+	ID          uint      `gorm:"primarykey" json:"id"`
+	RoomCode    string    `gorm:"size:10;index" json:"room_code"`
+	Winner      string    `gorm:"size:16;not null" json:"winner"`
+	PlayerCount int       `json:"player_count"`
+	DayCount    int       `json:"day_count"`
+	CreatedAt   time.Time `json:"created_at"`
+
+	Participants []GameParticipant `gorm:"foreignKey:GameRecordID" json:"participants,omitempty"`
+}
+
+type GameParticipant struct {
+	ID           uint   `gorm:"primarykey" json:"id"`
+	GameRecordID uint   `gorm:"index;not null" json:"game_record_id"`
+	UserID       uint   `gorm:"index;not null" json:"user_id"`
+	Username     string `gorm:"size:32;not null" json:"username"`
+	IsWitch      bool   `json:"is_witch"`
+	Alive        bool   `json:"alive"`
+	Won          bool   `json:"won"`
+	IsBot        bool   `json:"is_bot"`
+}
+
+type UserStatsRow struct {
+	TotalGames    int64 `json:"total_games"`
+	Wins          int64 `json:"wins"`
+	Losses        int64 `json:"losses"`
+	WitchGames    int64 `json:"witch_games"`
+	WitchWins     int64 `json:"witch_wins"`
+	VillagerGames int64 `json:"villager_games"`
+	VillagerWins  int64 `json:"villager_wins"`
+}
+
 func InitDB(dsn string) (*gorm.DB, error) {
 	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
 	if err != nil {
 		return nil, err
 	}
 
-	if err := db.AutoMigrate(&User{}, &CardDescription{}); err != nil {
+	if err := db.AutoMigrate(&User{}, &CardDescription{}, &GameRecord{}, &GameParticipant{}); err != nil {
 		return nil, err
 	}
-	
+
 	initCardDescriptions(db)
 
 	return db, nil

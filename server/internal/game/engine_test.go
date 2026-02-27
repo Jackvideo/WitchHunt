@@ -50,14 +50,14 @@ func blueCard(id string, ct CardType) *Card {
 // ======================== Game Setup ========================
 
 func TestNewGamePlayerCount(t *testing.T) {
-	_, err := newGame([]PlayerInfo{{1, "a"}, {2, "b"}, {3, "c"}})
+	_, err := newGame([]PlayerInfo{{1, "a", false}, {2, "b", false}, {3, "c", false}})
 	if err == nil {
 		t.Fatal("expected error for <4 players")
 	}
 
 	pls := make([]PlayerInfo, 4)
 	for i := range pls {
-		pls[i] = PlayerInfo{uint(i + 1), "p"}
+		pls[i] = PlayerInfo{uint(i + 1), "p", false}
 	}
 	g, err := newGame(pls)
 	if err != nil {
@@ -79,7 +79,7 @@ func TestNewGamePlayerCount(t *testing.T) {
 func TestNewGameWitchAssignment(t *testing.T) {
 	pls := make([]PlayerInfo, 5)
 	for i := range pls {
-		pls[i] = PlayerInfo{uint(i + 1), "p"}
+		pls[i] = PlayerInfo{uint(i + 1), "p", false}
 	}
 	g, _ := newGame(pls)
 
@@ -696,7 +696,7 @@ func TestEngineStartAndAction(t *testing.T) {
 	e := NewEngine()
 	players := make([]PlayerInfo, 4)
 	for i := range players {
-		players[i] = PlayerInfo{uint(i + 1), "p"}
+		players[i] = PlayerInfo{uint(i + 1), "p", false}
 	}
 
 	if err := e.StartGame("room1", players); err != nil {

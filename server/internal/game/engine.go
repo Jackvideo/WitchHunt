@@ -55,6 +55,48 @@ func (e *SalemEngine) GetViewForPlayer(roomCode string, userID uint) *PlayerView
 	return g.viewForPlayer(userID)
 }
 
+type GameResult struct {
+	Winner      string
+	DayNumber   int
+	PlayerCount int
+	Players     []PlayerResult
+}
+
+type PlayerResult struct {
+	UserID   uint
+	Username string
+	IsWitch  bool
+	Alive    bool
+	IsBot    bool
+	Won      bool
+}
+
+func (e *SalemEngine) GetGameResult(roomCode string) *GameResult {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	g, ok := e.games[roomCode]
+	if !ok || g.Phase != PhaseGameOver {
+		return nil
+	}
+	r := &GameResult{
+		Winner:      g.Winner,
+		DayNumber:   g.DayNumber,
+		PlayerCount: len(g.Players),
+	}
+	for _, p := range g.Players {
+		won := (g.Winner == "witch" && p.IsWitch) || (g.Winner == "villager" && !p.IsWitch)
+		r.Players = append(r.Players, PlayerResult{
+			UserID:   p.UserID,
+			Username: p.Username,
+			IsWitch:  p.IsWitch,
+			Alive:    p.Alive,
+			IsBot:    p.IsBot,
+			Won:      won,
+		})
+	}
+	return r
+}
+
 func (e *SalemEngine) EndGame(roomCode string) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -73,6 +115,7 @@ type Game struct {
 	Events          []Event
 	Winner          string
 	TotalWitchCards int
+	DayNumber       int
 
 	WitchVotes     map[uint]uint
 	MurderTarget   uint
@@ -161,9 +204,10 @@ func newGame(players []PlayerInfo) (*Game, error) {
 		DrawPile:        deck,
 		CurrentTurn:     0,
 		TotalWitchCards: wc,
+		DayNumber:       0,
 		WitchVotes:      make(map[uint]uint),
 		ConfessChoices:  make(map[uint]bool),
-		Events:          []Event{{Message: "游戏开始！白天阶段，请开始行动"}},
+		Events:          []Event{{Message: "第0天，游戏开始！"}},
 	}, nil
 }
 

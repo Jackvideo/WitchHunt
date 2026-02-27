@@ -31,6 +31,82 @@ const targetStep = ref<'none' | 'first' | 'second'>('none')
 const firstTargetId = ref<number | null>(null)
 
 const logEl = ref<HTMLElement | null>(null)
+const chatEl = ref<HTMLElement | null>(null)
+
+interface ChatMsg {
+  id: number
+  userId: number
+  username: string
+  text: string
+  ts: number
+  system?: boolean
+}
+const MAX_CHAT_MSGS = 100
+let chatIdCounter = 0
+const chatMessages = reactive<ChatMsg[]>([])
+const chatInput = ref('')
+const chatOpen = ref(false)
+const chatUnread = ref(0)
+const chatCooldown = ref(false)
+
+function addChatMessage(msg: Omit<ChatMsg, 'id'>) {
+  chatMessages.push({ ...msg, id: chatIdCounter++ })
+  if (chatMessages.length > MAX_CHAT_MSGS) {
+    chatMessages.splice(0, chatMessages.length - MAX_CHAT_MSGS)
+  }
+  if (chatOpen.value) {
+    nextTick(() => chatEl.value?.scrollTo(0, chatEl.value.scrollHeight))
+  } else {
+    chatUnread.value++
+  }
+}
+
+function sendChat() {
+  const text = chatInput.value.trim()
+  if (!text || chatCooldown.value) return
+  send({ type: 'chat_message', payload: { text } })
+  chatInput.value = ''
+  chatCooldown.value = true
+  setTimeout(() => { chatCooldown.value = false }, 1000)
+}
+
+function toggleChat() {
+  chatOpen.value = !chatOpen.value
+  if (chatOpen.value) {
+    chatUnread.value = 0
+    nextTick(() => chatEl.value?.scrollTo(0, chatEl.value.scrollHeight))
+  }
+}
+
+function chatTime(ts: number): string {
+  const d = new Date(ts)
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+}
+
+const quickEmojis = ['👍', '👎', '🤔', '😂', '😱', '🔥', '💀', '🛡️', '🎯', '🤫', '👀', '❓']
+const showEmojiPicker = ref(false)
+
+interface FloatingEmoji {
+  id: number
+  userId: number
+  emoji: string
+}
+let emojiIdCounter = 0
+const floatingEmojis = reactive<FloatingEmoji[]>([])
+
+function sendEmoji(emoji: string) {
+  send({ type: 'send_emoji', payload: { emoji } })
+  showEmojiPicker.value = false
+}
+
+function spawnFloatingEmoji(userId: number, emoji: string) {
+  const id = emojiIdCounter++
+  floatingEmojis.push({ id, userId, emoji })
+  setTimeout(() => {
+    const idx = floatingEmojis.findIndex(e => e.id === id)
+    if (idx !== -1) floatingEmojis.splice(idx, 1)
+  }, 2200)
+}
 
 const playerEffects = reactive<Record<number, string>>({})
 const effectTimeouts = new Map<number, ReturnType<typeof setTimeout>>()
@@ -82,19 +158,31 @@ watch(messages, (msgs) => {
     errorMsg.value = (last.payload as { message: string }).message
     setTimeout(() => (errorMsg.value = ''), 3000)
   }
+  if (last.type === 'player_emoji' && last.payload) {
+    const { user_id, emoji } = last.payload as { user_id: number; emoji: string }
+    spawnFloatingEmoji(user_id, emoji)
+  }
+  if (last.type === 'chat_message' && last.payload) {
+    const p = last.payload as { user_id: number; username: string; text: string; ts: number }
+    addChatMessage({ userId: p.user_id, username: p.username, text: p.text, ts: p.ts })
+  }
   if (last.type === 'player_join' && last.payload) {
+    const name = String(last.payload.username)
+    addChatMessage({ userId: 0, username: '', text: `${name} 加入了房间`, ts: Date.now(), system: true })
     if (roomStore.currentRoom) {
       const pid = Number(last.payload.user_id || last.payload.id)
       if (!roomStore.currentRoom.players.find(p => p.id === pid)) {
         roomStore.currentRoom.players.push({
           id: pid,
-          username: String(last.payload.username),
+          username: name,
           ready: true
         })
       }
     }
   }
   if (last.type === 'player_leave' && last.payload) {
+    const name = String(last.payload.username)
+    addChatMessage({ userId: 0, username: '', text: `${name} 离开了房间`, ts: Date.now(), system: true })
     if (roomStore.currentRoom) {
       const pid = Number(last.payload.user_id || last.payload.id)
       roomStore.currentRoom.players = roomStore.currentRoom.players.filter(p => p.id !== pid)
@@ -201,7 +289,7 @@ function flipIdentity(index: number) {
           </span>
         </h1>
         <p v-if="gs" class="text-xs text-gray-400">
-          {{ phaseNames[gs.phase] || gs.phase }}
+          第{{ gs.day_number }}天 · {{ phaseNames[gs.phase] || gs.phase }}
           <span v-if="gs.is_your_turn" class="text-accent ml-1">你的回合</span>
         </p>
       </div>
@@ -266,7 +354,11 @@ function flipIdentity(index: number) {
           <span v-if="playerEffects[p.user_id] === 'contagion'" class="text-[10px] px-1.5 py-0.5 rounded bg-red-500/30 text-red-300 animate-pulse">
             传染
           </span>
-          <span v-if="p.unrevealed_count > 0 && p.user_id !== gs?.your_id" class="text-[10px] px-1.5 py-0.5 rounded bg-gray-600/30 text-gray-400">
+          <span v-if="p.unrevealed_count > 0 && p.user_id !== gs?.your_id"
+            class="text-[10px] px-1.5 py-0.5 rounded transition-all duration-300"
+            :class="playerEffects[p.user_id] === 'contagion'
+              ? 'bg-red-500/30 text-red-300 border border-red-400/60 contagion-card-glow'
+              : 'bg-gray-600/30 text-gray-400'">
             身份 {{ p.unrevealed_count }}张
           </span>
           <span v-for="(ri, idx) in (p.revealed_identities || [])" :key="'rev-'+idx"
@@ -275,13 +367,24 @@ function flipIdentity(index: number) {
             {{ identityNames[ri] || ri }}
           </span>
           <span v-for="(ui, idx) in (p.user_id === gs?.your_id ? gs?.identities?.filter(i => !i.revealed) : [])" :key="'unrev-'+idx"
-            class="text-[10px] px-1.5 py-0.5 rounded border border-gray-600 bg-gray-600/30 text-gray-300">
+            class="text-[10px] px-1.5 py-0.5 rounded border transition-all duration-300"
+            :class="playerEffects[p.user_id] === 'contagion'
+              ? 'border-red-400/60 bg-red-500/25 text-red-200 contagion-card-glow'
+              : 'border-gray-600 bg-gray-600/30 text-gray-300'">
             {{ identityNames[ui.type] || ui.type }}
           </span>
         </div>
         <div v-if="!p.alive" class="absolute inset-0 flex items-center justify-center">
           <span class="text-xl text-gray-600 font-bold">死亡</span>
         </div>
+        <!-- Floating emojis -->
+        <TransitionGroup name="emoji-float">
+          <span
+            v-for="fe in floatingEmojis.filter(e => e.userId === p.user_id)"
+            :key="fe.id"
+            class="emoji-bubble absolute -right-2 top-0 text-2xl pointer-events-none select-none"
+          >{{ fe.emoji }}</span>
+        </TransitionGroup>
       </div>
     </div>
 
@@ -397,6 +500,95 @@ function flipIdentity(index: number) {
       </p>
     </div>
 
+    <!-- Chat Panel -->
+    <div class="bg-surface-light rounded-xl overflow-hidden border border-gray-700/50">
+      <!-- Chat Header (toggle) -->
+      <button
+        class="w-full flex items-center justify-between px-4 py-2.5 hover:bg-gray-700/30 transition"
+        @click="toggleChat"
+      >
+        <div class="flex items-center gap-2">
+          <span class="text-xs font-medium text-gray-300">💬 聊天</span>
+          <span v-if="chatUnread > 0 && !chatOpen"
+            class="min-w-[18px] h-[18px] flex items-center justify-center text-[10px] font-bold bg-red-500 text-white rounded-full px-1 animate-bounce">
+            {{ chatUnread > 99 ? '99+' : chatUnread }}
+          </span>
+        </div>
+        <svg class="w-4 h-4 text-gray-500 transition-transform" :class="chatOpen ? 'rotate-180' : ''" viewBox="0 0 20 20" fill="currentColor">
+          <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd" />
+        </svg>
+      </button>
+
+      <!-- Chat Body -->
+      <Transition name="chat-slide">
+        <div v-if="chatOpen" class="border-t border-gray-700/50">
+          <!-- Messages -->
+          <div ref="chatEl" class="h-52 overflow-y-auto px-3 py-2 space-y-1.5 chat-scroll">
+            <p v-if="chatMessages.length === 0" class="text-xs text-gray-600 text-center py-8">暂无消息，说点什么吧</p>
+            <div v-for="msg in chatMessages" :key="msg.id">
+              <!-- System message -->
+              <p v-if="msg.system" class="text-[10px] text-gray-500 text-center py-0.5">{{ msg.text }}</p>
+              <!-- Player message -->
+              <div v-else class="flex gap-2" :class="msg.userId === auth.user?.id ? 'flex-row-reverse' : ''">
+                <div
+                  class="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5"
+                  :class="msg.userId === auth.user?.id ? 'bg-primary/30 text-primary-light' : 'bg-gray-600 text-gray-300'"
+                >{{ msg.username.charAt(0).toUpperCase() }}</div>
+                <div class="max-w-[75%] min-w-0">
+                  <div class="flex items-baseline gap-1.5 mb-0.5" :class="msg.userId === auth.user?.id ? 'flex-row-reverse' : ''">
+                    <span class="text-[10px] font-medium text-gray-400">{{ msg.username }}</span>
+                    <span class="text-[9px] text-gray-600">{{ chatTime(msg.ts) }}</span>
+                  </div>
+                  <div
+                    class="px-2.5 py-1.5 rounded-xl text-xs leading-relaxed break-words"
+                    :class="msg.userId === auth.user?.id
+                      ? 'bg-primary/20 text-gray-200 rounded-tr-sm'
+                      : 'bg-gray-700/60 text-gray-300 rounded-tl-sm'"
+                  >{{ msg.text }}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Input -->
+          <div class="flex items-center gap-2 px-3 py-2 border-t border-gray-700/50">
+            <div class="relative">
+              <button
+                class="w-8 h-8 flex items-center justify-center text-base rounded-lg hover:bg-gray-600/60 transition"
+                @click="showEmojiPicker = !showEmojiPicker"
+              >😊</button>
+              <Transition name="fade">
+                <div v-if="showEmojiPicker" class="absolute bottom-full left-0 mb-2 bg-surface border border-gray-700 rounded-xl p-2 shadow-xl z-40">
+                  <div class="grid grid-cols-6 gap-1">
+                    <button
+                      v-for="em in quickEmojis" :key="em"
+                      class="w-8 h-8 flex items-center justify-center text-lg rounded-lg hover:bg-gray-600/60 active:scale-90 transition-all"
+                      @click="sendEmoji(em)"
+                    >{{ em }}</button>
+                  </div>
+                </div>
+              </Transition>
+            </div>
+            <input
+              v-model="chatInput"
+              type="text"
+              maxlength="200"
+              placeholder="发送消息..."
+              class="flex-1 min-w-0 px-3 py-1.5 bg-surface rounded-lg border border-gray-600 text-xs
+                     focus:border-primary-light focus:outline-none transition placeholder-gray-600"
+              @keydown.enter.prevent="sendChat"
+            />
+            <button
+              :disabled="!chatInput.trim() || chatCooldown"
+              class="px-3 py-1.5 bg-primary hover:bg-primary-light rounded-lg text-xs font-medium transition
+                     disabled:opacity-30 disabled:cursor-not-allowed shrink-0"
+              @click="sendChat"
+            >发送</button>
+          </div>
+        </div>
+      </Transition>
+    </div>
+
     <!-- Event log -->
     <div ref="logEl" class="bg-surface-light rounded-xl p-3 max-h-48 overflow-y-auto">
       <p class="text-[10px] text-gray-500 mb-1">事件日志</p>
@@ -431,4 +623,61 @@ function flipIdentity(index: number) {
 .animate-shake {
   animation: shake 0.4s ease-in-out 6;
 }
+
+@keyframes emoji-rise {
+  0% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: translateY(-28px) scale(1.3);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-52px) scale(0.8);
+  }
+}
+.emoji-bubble {
+  animation: emoji-rise 2.2s ease-out forwards;
+  filter: drop-shadow(0 0 4px rgba(255, 255, 255, 0.3));
+}
+.emoji-float-enter-from {
+  opacity: 0;
+  transform: translateY(8px) scale(0.5);
+}
+.emoji-float-leave-to {
+  opacity: 0;
+}
+
+@keyframes contagion-glow {
+  0%, 100% {
+    box-shadow: 0 0 4px rgba(239, 68, 68, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 10px rgba(239, 68, 68, 0.6);
+  }
+}
+.contagion-card-glow {
+  animation: contagion-glow 1s ease-in-out infinite;
+}
+
+.chat-slide-enter-active { transition: all 0.25s ease-out; }
+.chat-slide-leave-active { transition: all 0.2s ease-in; }
+.chat-slide-enter-from,
+.chat-slide-leave-to {
+  max-height: 0;
+  opacity: 0;
+  overflow: hidden;
+}
+.chat-slide-enter-to,
+.chat-slide-leave-from {
+  max-height: 400px;
+  opacity: 1;
+}
+
+.chat-scroll::-webkit-scrollbar { width: 4px; }
+.chat-scroll::-webkit-scrollbar-track { background: transparent; }
+.chat-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+.chat-scroll::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
 </style>

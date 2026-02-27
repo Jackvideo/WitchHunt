@@ -407,8 +407,9 @@ func (g *Game) resolveNight() (*ActionResult, error) {
 	g.clearNightState()
 	g.reshuffleDeck()
 	g.Phase = PhaseDay
+	g.DayNumber++
 	g.nextTurn()
-	g.evt("新的一天开始了")
+	g.evt("第%d天开始了", g.DayNumber)
 	return &ActionResult{}, nil
 }
 

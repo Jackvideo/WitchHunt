@@ -64,6 +64,7 @@ export interface GameEvent {
 
 export interface GameState {
   phase: string
+  day_number: number
   your_id: number
   is_your_turn: boolean
   hand: Card[] | null
@@ -111,4 +112,45 @@ export const identityColorClass: Record<string, string> = {
 
 export function needsTwoTargets(card: Card): boolean {
   return card.type === 'frame' || card.type === 'robbery'
+}
+
+// ---- Stats types ----
+
+export interface UserStats {
+  total_games: number
+  wins: number
+  losses: number
+  witch_games: number
+  witch_wins: number
+  villager_games: number
+  villager_wins: number
+}
+
+export interface GameParticipant {
+  user_id: number
+  username: string
+  is_witch: boolean
+  alive: boolean
+  won: boolean
+  is_bot: boolean
+}
+
+export interface GameRecordItem {
+  id: number
+  room_code: string
+  winner: string
+  player_count: number
+  day_count: number
+  created_at: string
+  participants: GameParticipant[]
+  your_role: string
+  won: boolean
+  alive: boolean
+}
+
+export interface HistoryResponse {
+  records: GameRecordItem[]
+  page: number
+  size: number
+  total: number
 }
