@@ -407,7 +407,7 @@ function flipIdentity(index: number) {
     <div v-if="gs && gs.identities && false" class="bg-surface-light rounded-xl p-3">
       <p class="text-[10px] text-gray-500 mb-1.5">你的身份牌</p>
       <div class="flex gap-1.5 flex-wrap">
-        <div v-for="(id, i) in gs.identities" :key="i"
+        <div v-for="(id, i) in gs?.identities" :key="i"
           class="px-3 py-1.5 rounded-lg border text-xs font-medium"
           :class="id.revealed
             ? (identityColorClass[id.type] || 'bg-gray-600/30 text-gray-400 border-gray-600')
@@ -415,7 +415,7 @@ function flipIdentity(index: number) {
           {{ id.revealed ? (identityNames[id.type] || id.type) : '?' }}
         </div>
       </div>
-      <p v-if="gs.is_witch" class="text-[10px] text-purple-400 mt-1">你是女巫阵营</p>
+      <p v-if="gs?.is_witch" class="text-[10px] text-purple-400 mt-1">你是女巫阵营</p>
     </div>
 
     <!-- Your hand -->
