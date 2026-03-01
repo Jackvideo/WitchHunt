@@ -1,0 +1,46 @@
+services:
+  mysql:
+    profiles: ["prod"]
+    mem_limit: 768m
+    cpus: 1.00
+    pids_limit: 300
+    ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535
+
+  backend:
+    profiles: ["prod"]
+    mem_limit: 512m
+    cpus: 0.75
+    pids_limit: 200
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m,noexec,nosuid
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    ulimits:
+      nofile:
+        soft: 32768
+        hard: 32768
+
+  frontend:
+    profiles: ["prod"]
+    mem_limit: 256m
+    cpus: 0.50
+    pids_limit: 100
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx:size=32m
+      - /var/run:size=8m
+      - /tmp:size=16m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    ulimits:
+      nofile:
+        soft: 32768
+        hard: 32768

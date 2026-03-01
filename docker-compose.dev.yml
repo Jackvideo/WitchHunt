@@ -1,0 +1,15 @@
+services:
+  mysql:
+    profiles: ["dev"]
+
+  backend:
+    profiles: ["dev"]
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      GIN_MODE: debug
+
+  frontend:
+    profiles: ["dev"]
+    ports:
+      - "${HOST_PORT:-5173}:80"
