@@ -458,12 +458,12 @@ function flipIdentity(index: number) {
       <!-- Day actions -->
       <button v-if="actions.includes('draw')"
         class="px-4 py-2 bg-primary hover:bg-primary-light rounded-lg text-xs font-medium transition"
-        @click="sendAction('draw')">
+        @click="clearSelection(); sendAction('draw')">
         抽牌 (剩{{ gs?.draw_pile_count }}张)
       </button>
       <button v-if="actions.includes('end_turn')"
         class="px-4 py-2 bg-surface-light hover:bg-gray-600 border border-gray-600 rounded-lg text-xs font-medium transition"
-        @click="sendAction('end_turn')">
+        @click="clearSelection(); sendAction('end_turn')">
         结束回合
       </button>
 
@@ -496,7 +496,7 @@ function flipIdentity(index: number) {
       <p v-if="gs?.phase === 'night_result' && !actions.includes('confess')" class="text-xs text-gray-500">等待其他玩家决定...</p>
       <p v-if="gs?.phase === 'trial' && !actions.includes('flip_identity')" class="text-xs text-gray-500">等待审判者翻牌...</p>
       <p v-if="gs?.phase === 'day' && !gs.is_your_turn" class="text-xs text-gray-500">
-        等待 {{ gs.players.find((_, i) => i === gs!.players.findIndex(p => gs!.is_your_turn ? false : p.alive))?.username || '...' }} 行动
+        等待 {{ gs.players.find(p => p.user_id === gs!.current_player_id)?.username || '...' }} 行动
       </p>
     </div>
 

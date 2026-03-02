@@ -191,9 +191,11 @@ func newGame(players []PlayerInfo) (*Game, error) {
 	if nightCard != nil {
 		deck = append(deck, nightCard)
 	}
+	firstTurn := 0
 	if blackCatCard != nil {
-		holder := gp[rand.Intn(n)]
-		holder.Equipment = append(holder.Equipment, blackCatCard)
+		idx := rand.Intn(n)
+		gp[idx].Equipment = append(gp[idx].Equipment, blackCatCard)
+		firstTurn = idx
 	}
 
 	_, wc, _ := identityCounts(n)
@@ -202,12 +204,12 @@ func newGame(players []PlayerInfo) (*Game, error) {
 		Phase:           PhaseDay,
 		Players:         gp,
 		DrawPile:        deck,
-		CurrentTurn:     0,
+		CurrentTurn:     firstTurn,
 		TotalWitchCards: wc,
 		DayNumber:       0,
 		WitchVotes:      make(map[uint]uint),
 		ConfessChoices:  make(map[uint]bool),
-		Events:          []Event{{Message: "第0天，游戏开始！"}},
+		Events:          []Event{{Message: fmt.Sprintf("第0天，游戏开始！%s 持有黑猫，作为一号位先行动", gp[firstTurn].Username)}},
 	}, nil
 }
 

@@ -1,21 +1,22 @@
 package game
 
 type PlayerView struct {
-	Phase         Phase           `json:"phase"`
-	DayNumber     int             `json:"day_number"`
-	YourID        uint            `json:"your_id"`
-	IsYourTurn    bool            `json:"is_your_turn"`
-	Hand          []*Card         `json:"hand"`
-	Identities    []*IdentityCard `json:"identities"`
-	IsWitch       bool            `json:"is_witch"`
-	Players       []*PublicPlayer `json:"players"`
-	Actions       []string        `json:"actions"`
-	Events        []Event         `json:"events"`
-	DrawPileCount int             `json:"draw_pile_count"`
-	Winner        string          `json:"winner,omitempty"`
-	FellowWitches []uint          `json:"fellow_witches,omitempty"`
-	Trial         *TrialInfo      `json:"trial,omitempty"`
-	ValidTargets  []uint          `json:"valid_targets,omitempty"`
+	Phase           Phase           `json:"phase"`
+	DayNumber       int             `json:"day_number"`
+	YourID          uint            `json:"your_id"`
+	IsYourTurn      bool            `json:"is_your_turn"`
+	CurrentPlayerID uint            `json:"current_player_id"`
+	Hand            []*Card         `json:"hand"`
+	Identities      []*IdentityCard `json:"identities"`
+	IsWitch         bool            `json:"is_witch"`
+	Players         []*PublicPlayer `json:"players"`
+	Actions         []string        `json:"actions"`
+	Events          []Event         `json:"events"`
+	DrawPileCount   int             `json:"draw_pile_count"`
+	Winner          string          `json:"winner,omitempty"`
+	FellowWitches   []uint          `json:"fellow_witches,omitempty"`
+	Trial           *TrialInfo      `json:"trial,omitempty"`
+	ValidTargets    []uint          `json:"valid_targets,omitempty"`
 }
 
 type PublicPlayer struct {
@@ -39,18 +40,19 @@ func (g *Game) viewForPlayer(userID uint) *PlayerView {
 	}
 
 	v := &PlayerView{
-		Phase:         g.Phase,
-		DayNumber:     g.DayNumber,
-		YourID:        userID,
-		IsYourTurn:    g.Phase == PhaseDay && g.currentPlayer().UserID == userID,
-		Hand:          me.Hand,
-		Identities:    me.Identities,
-		IsWitch:       me.IsWitch,
-		DrawPileCount: len(g.DrawPile),
-		Winner:        g.Winner,
-		Trial:         g.Trial,
-		Events:        g.Events,
-		Actions:       g.availableActions(me),
+		Phase:           g.Phase,
+		DayNumber:       g.DayNumber,
+		YourID:          userID,
+		IsYourTurn:      g.Phase == PhaseDay && g.currentPlayer().UserID == userID,
+		CurrentPlayerID: g.currentPlayer().UserID,
+		Hand:            me.Hand,
+		Identities:      me.Identities,
+		IsWitch:         me.IsWitch,
+		DrawPileCount:   len(g.DrawPile),
+		Winner:          g.Winner,
+		Trial:           g.Trial,
+		Events:          g.Events,
+		Actions:         g.availableActions(me),
 	}
 
 	if me.IsWitch && me.Alive {

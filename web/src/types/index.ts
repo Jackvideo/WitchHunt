@@ -67,6 +67,7 @@ export interface GameState {
   day_number: number
   your_id: number
   is_your_turn: boolean
+  current_player_id: number
   hand: Card[] | null
   identities: IdentityCard[] | null
   is_witch: boolean
